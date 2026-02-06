@@ -163,8 +163,8 @@ if st.session_state.role=="skiller":
     cat = st.selectbox("Category", CATEGORIES)
     if st.button("Post Talent") and media:
         pid = str(uuid.uuid4())
-        blob = bucket.blob(pid)
-        blob.upload_from_file(media)
+        blob = bucket.blob(f"posts/{pid}")  # ← هنا صححنا path
+        blob.upload_from_file(media, content_type=media.type)
         blob.make_public()
         db.collection("posts").add({
             "user": st.session_state.uid,
@@ -182,7 +182,7 @@ if st.session_state.role=="skiller":
     if st.button("Send Payment") and proof:
         rid = str(uuid.uuid4())
         b = bucket.blob(f"payments/{rid}")
-        b.upload_from_file(proof)
+        b.upload_from_file(proof, content_type=proof.type)
         b.make_public()
         db.collection("payments").add({
             "user": st.session_state.uid,
