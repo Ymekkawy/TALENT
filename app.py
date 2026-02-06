@@ -10,8 +10,7 @@ import uuid
 ADMIN_USERNAME = "dev"
 ADMIN_PASSWORD = "152007poco"
 
-FIREBASE_SERVICE_ACCOUNT = 
-{
+FIREBASE_SERVICE_ACCOUNT = {
   "type": "service_account",
   "project_id": "talent-199e5",
   "private_key_id": "f687fdbe55873a2b8a665edc40408a21e9e288ea",
@@ -24,6 +23,8 @@ FIREBASE_SERVICE_ACCOUNT =
   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40talent-199e5.iam.gserviceaccount.com",
   "universe_domain": "googleapis.com"
 }
+
+
 
 STORAGE_BUCKET = "PUT_PROJECT.appspot.com"
 PAYMENT_NUMBER = "01000004397"
