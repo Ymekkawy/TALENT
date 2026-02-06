@@ -25,10 +25,9 @@ FIREBASE_SERVICE_ACCOUNT = {
 }
 
 
-
-STORAGE_BUCKET = "PUT_PROJECT.appspot.com"
+STORAGE_BUCKET = "talent-199e5.appspot.com"
 PAYMENT_NUMBER = "01000004397"
-TOKEN_PACKAGES = {30: 100, 60: 90, 600: 1500}
+TOKEN_PACKAGES = {30: 100, 60: 90, 600: 1500}  # tokens: price
 CATEGORIES = ["Singing","Acting","Writing","Drawing","Programming","Music","Other"]
 
 # ==================================================
@@ -42,12 +41,14 @@ db = firestore.client()
 bucket = storage.bucket(STORAGE_BUCKET)
 
 # ==================================================
-# SESSION STATE
+# SESSION STATE DEFAULTS
 # ==================================================
 if "uid" not in st.session_state:
     st.session_state.uid = None
 if "role" not in st.session_state:
     st.session_state.role = None
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
 # ==================================================
 # STYLE
@@ -96,7 +97,7 @@ def signup(username, password, role):
 # ==================================================
 # LOGIN / SIGNUP UI
 # ==================================================
-if not st.session_state.uid:
+if not st.session_state.logged_in:
     st.title("TALENT HOUSE")
     tab1, tab2 = st.tabs(["Login","Sign Up"])
 
@@ -106,6 +107,7 @@ if not st.session_state.uid:
         if st.button("Login"):
             success = login(u,p)
             if success:
+                st.session_state.logged_in = True
                 st.experimental_rerun()
             else:
                 st.error("Invalid credentials or banned user.")
@@ -138,7 +140,7 @@ if st.session_state.role=="admin":
     for p in db.collection("posts").stream():
         d = p.to_dict()
         st.image(d["media_url"])
-        st.write(d["description"])
+        st.write(d.get("description",""))
         rating = st.slider("Admin Rating",0,10,d.get("admin_rating",0),key=f"admin_{p.id}")
         if st.button("Save Rating",key=f"save_{p.id}"):
             db.collection("posts").document(p.id).update({"admin_rating":rating})
@@ -188,25 +190,4 @@ if st.session_state.role=="skiller":
             "user": st.session_state.uid,
             "tokens": pack,
             "price": TOKEN_PACKAGES[pack],
-            "screenshot": b.public_url,
-            "number": PAYMENT_NUMBER,
-            "created": datetime.utcnow()
-        })
-
-# ==================================================
-# SCOUT PANEL
-# ==================================================
-if st.session_state.role=="scout":
-    st.title("Scout Panel")
-    flt = st.selectbox("Filter by Category", ["All"]+CATEGORIES)
-
-    for p in db.collection("posts").order_by("admin_rating", direction=firestore.Query.DESCENDING).stream():
-        d = p.to_dict()
-        if flt!="All" and d["category"]!=flt:
-            continue
-        st.image(d["media_url"])
-        st.write(d["description"])
-        st.write(f"Category: {d['category']}")
-        score = st.slider("Your Rating",0,10,0,key=p.id)
-        if st.button("Submit Rating",key=f"rate_{p.id}"):
-            db.collection("posts").document(p.id).update({"scout_rating":score})
+            "sc
