@@ -5,7 +5,7 @@ from datetime import datetime
 import uuid
 
 # ==================================================
-# CONFIG - PUT YOUR VALUES HERE
+# CONFIGURATION
 # ==================================================
 ADMIN_USERNAME = "dev"
 ADMIN_PASSWORD = "152007poco"
@@ -51,7 +51,7 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 # ==================================================
-# STYLE
+# STYLING
 # ==================================================
 st.markdown("""
 <style>
@@ -139,7 +139,10 @@ if st.session_state.role=="admin":
     st.subheader("Posts – Admin Ratings")
     for p in db.collection("posts").stream():
         d = p.to_dict()
-        st.image(d["media_url"])
+        if d["media_url"].endswith(("mp4")):
+            st.video(d["media_url"])
+        else:
+            st.image(d["media_url"])
         st.write(d.get("description",""))
         rating = st.slider("Admin Rating",0,10,d.get("admin_rating",0),key=f"admin_{p.id}")
         if st.button("Save Rating",key=f"save_{p.id}"):
@@ -190,7 +193,12 @@ if st.session_state.role=="skiller":
             "user": st.session_state.uid,
             "tokens": pack,
             "price": TOKEN_PACKAGES[pack],
-            # ==================================================
+            "screenshot": b.public_url,
+            "number": PAYMENT_NUMBER,
+            "created": datetime.utcnow()
+        })
+
+# ==================================================
 # SCOUT PANEL
 # ==================================================
 if st.session_state.role == "scout":
@@ -202,17 +210,14 @@ if st.session_state.role == "scout":
         if flt != "All" and d["category"] != flt:
             continue
 
-        # عرض الصورة أو الفيديو
         if d["media_url"].endswith(("mp4")):
             st.video(d["media_url"])
         else:
             st.image(d["media_url"])
 
-        # وصف البوست
-        st.write(d.get("description", ""))
+        st.write(d.get("description",""))
         st.write(f"Category: {d['category']}")
 
-        # تقييم السكاوت
         key_name = f"scout_rating_{p.id}"
         if key_name not in st.session_state:
             st.session_state[key_name] = 0
@@ -223,4 +228,3 @@ if st.session_state.role == "scout":
         if st.button("Submit Rating", key=f"rate_{p.id}"):
             db.collection("posts").document(p.id).update({"scout_rating": score})
             st.success("Rating submitted!")
-
