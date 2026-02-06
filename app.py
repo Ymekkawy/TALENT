@@ -4,9 +4,9 @@ from firebase_admin import credentials, firestore, storage
 from datetime import datetime
 import uuid
 
-# ==================================================
-# CONFIGURATION
-# ==================================================
+# ===========================
+# CONFIG
+# ===========================
 ADMIN_USERNAME = "dev"
 ADMIN_PASSWORD = "152007poco"
 
@@ -24,15 +24,14 @@ FIREBASE_SERVICE_ACCOUNT = {
   "universe_domain": "googleapis.com"
 }
 
-
 STORAGE_BUCKET = "talent-199e5.appspot.com"
 PAYMENT_NUMBER = "01000004397"
-TOKEN_PACKAGES = {30: 100, 60: 90, 600: 1500}  # tokens: price
+TOKEN_PACKAGES = {30: 100, 60: 90, 600: 1500}
 CATEGORIES = ["Singing","Acting","Writing","Drawing","Programming","Music","Other"]
 
-# ==================================================
+# ===========================
 # FIREBASE INIT
-# ==================================================
+# ===========================
 if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT)
     firebase_admin.initialize_app(cred, {"storageBucket": STORAGE_BUCKET})
@@ -40,16 +39,16 @@ if not firebase_admin._apps:
 db = firestore.client()
 bucket = storage.bucket(STORAGE_BUCKET)
 
-# ==================================================
+# ===========================
 # SESSION STATE DEFAULTS
-# ==================================================
+# ===========================
 for key in ["uid","role","logged_in"]:
     if key not in st.session_state:
         st.session_state[key] = None if key!="logged_in" else False
 
-# ==================================================
+# ===========================
 # STYLING
-# ==================================================
+# ===========================
 st.markdown("""
 <style>
 .stApp { background-color:#0b0b10; color:white; }
@@ -60,9 +59,9 @@ input, textarea, select { background:#111 !important; color:white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================================================
-# LOGIN / SIGNUP FUNCTIONS
-# ==================================================
+# ===========================
+# FUNCTIONS
+# ===========================
 def login(username, password):
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         st.session_state.uid = "ADMIN"
@@ -87,125 +86,36 @@ def signup(username, password, role):
         "created": datetime.utcnow()
     })
 
-# ==================================================
+# ===========================
 # LOGIN / SIGNUP UI
-# ==================================================
+# ===========================
 if not st.session_state.logged_in:
     st.title("TALENT HOUSE")
     tab1, tab2 = st.tabs(["Login","Sign Up"])
     with tab1:
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+        u = st.text_input("Username", key="login_user")
+        p = st.text_input("Password", type="password", key="login_pass")
         if st.button("Login"):
             if login(u,p):
                 st.session_state.logged_in = True
-                st.experimental_rerun()
+                st.experimental_rerun()  # ✅ rerun safe after session_state set
             else:
                 st.error("Invalid credentials or banned user.")
     with tab2:
-        u = st.text_input("New Username")
-        p = st.text_input("New Password", type="password")
-        r = st.selectbox("Role", ["skiller","scout"])
+        u = st.text_input("New Username", key="signup_user")
+        p = st.text_input("New Password", type="password", key="signup_pass")
+        r = st.selectbox("Role", ["skiller","scout"], key="signup_role")
         if st.button("Create Account"):
             signup(u,p,r)
             st.success("Account created successfully.")
     st.stop()
 
-# ==================================================
+# ===========================
 # ADMIN PANEL
-# ==================================================
+# ===========================
 if st.session_state.role=="admin":
     st.title("Admin Dashboard")
     st.subheader("Users")
     for u in db.collection("users").stream():
         d = u.to_dict()
-        col1,col2,col3 = st.columns([3,2,2])
-        col1.write(f"{d['username']} ({d['role']})")
-        col2.write(f"Tokens: {d.get('tokens',0)}")
-        if col3.button("BAN",key=u.id):
-            db.collection("users").document(u.id).update({"banned":True})
-
-    st.subheader("Posts – Admin Ratings")
-    for p in db.collection("posts").stream():
-        d = p.to_dict()
-        if d["media_url"].endswith(("mp4")):
-            st.video(d["media_url"])
-        else:
-            st.image(d["media_url"])
-        st.write(d.get("description",""))
-        rating = st.slider("Admin Rating",0,10,d.get("admin_rating",0),key=f"admin_{p.id}")
-        if st.button("Save Rating",key=f"save_{p.id}"):
-            db.collection("posts").document(p.id).update({"admin_rating":rating})
-
-    st.subheader("Payment Requests")
-    for r in db.collection("payments").stream():
-        d = r.to_dict()
-        st.write(f"User: {d['user']} | Tokens: {d['tokens']} | Price: {d['price']} EGP")
-        st.image(d["screenshot"])
-        if st.button("Approve",key=r.id):
-            db.collection("users").document(d["user"]).update({"tokens":firestore.Increment(d["tokens"])})
-            db.collection("payments").document(r.id).delete()
-    st.stop()
-
-# ==================================================
-# SKILLER PANEL
-# ==================================================
-if st.session_state.role=="skiller":
-    st.title("Skiller Panel")
-    media = st.file_uploader("Upload Image or Video", type=["png","jpg","mp4"])
-    desc = st.text_area("Description (optional)")
-    cat = st.selectbox("Category", CATEGORIES)
-    if st.button("Post Talent") and media:
-        pid = str(uuid.uuid4())
-        blob = bucket.blob(pid)
-        blob.upload_from_file(media)
-        blob.make_public()
-        db.collection("posts").add({
-            "user": st.session_state.uid,
-            "media_url": blob.public_url,
-            "description": desc,
-            "category": cat,
-            "admin_rating": 0,
-            "created": datetime.utcnow()
-        })
-    st.subheader("Buy Tokens")
-    pack = st.selectbox("Choose Package", list(TOKEN_PACKAGES.keys()))
-    proof = st.file_uploader("Payment Screenshot", type=["png","jpg"])
-    if st.button("Send Payment") and proof:
-        rid = str(uuid.uuid4())
-        b = bucket.blob(f"payments/{rid}")
-        b.upload_from_file(proof)
-        b.make_public()
-        db.collection("payments").add({
-            "user": st.session_state.uid,
-            "tokens": pack,
-            "price": TOKEN_PACKAGES[pack],
-            "screenshot": b.public_url,
-            "number": PAYMENT_NUMBER,
-            "created": datetime.utcnow()
-        })
-
-# ==================================================
-# SCOUT PANEL
-# ==================================================
-if st.session_state.role=="scout":
-    st.title("Scout Panel")
-    flt = st.selectbox("Filter by Category", ["All"] + CATEGORIES)
-    for p in db.collection("posts").order_by("admin_rating", direction=firestore.Query.DESCENDING).stream():
-        d = p.to_dict()
-        if flt!="All" and d["category"]!=flt:
-            continue
-        if d["media_url"].endswith(("mp4")):
-            st.video(d["media_url"])
-        else:
-            st.image(d["media_url"])
-        st.write(d.get("description",""))
-        st.write(f"Category: {d['category']}")
-        key_name = f"scout_rating_{p.id}"
-        if key_name not in st.session_state:
-            st.session_state[key_name] = 0
-        score = st.slider("Your Rating",0,10,st.session_state[key_name],key=key_name)
-        st.session_state[key_name] = score
-        if st.button("Submit Rating",key=f"rate_{p.id}"):
-            db.collection("posts").document(p.id).update({"scout_rating":score})
-            st.success("Rating submitted")
+        col1,col2,col3 = st.co
