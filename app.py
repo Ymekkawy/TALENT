@@ -190,4 +190,37 @@ if st.session_state.role=="skiller":
             "user": st.session_state.uid,
             "tokens": pack,
             "price": TOKEN_PACKAGES[pack],
-            "sc
+            # ==================================================
+# SCOUT PANEL
+# ==================================================
+if st.session_state.role == "scout":
+    st.title("Scout Panel")
+    flt = st.selectbox("Filter by Category", ["All"] + CATEGORIES)
+
+    for p in db.collection("posts").order_by("admin_rating", direction=firestore.Query.DESCENDING).stream():
+        d = p.to_dict()
+        if flt != "All" and d["category"] != flt:
+            continue
+
+        # عرض الصورة أو الفيديو
+        if d["media_url"].endswith(("mp4")):
+            st.video(d["media_url"])
+        else:
+            st.image(d["media_url"])
+
+        # وصف البوست
+        st.write(d.get("description", ""))
+        st.write(f"Category: {d['category']}")
+
+        # تقييم السكاوت
+        key_name = f"scout_rating_{p.id}"
+        if key_name not in st.session_state:
+            st.session_state[key_name] = 0
+
+        score = st.slider("Your Rating", 0, 10, st.session_state[key_name], key=key_name)
+        st.session_state[key_name] = score
+
+        if st.button("Submit Rating", key=f"rate_{p.id}"):
+            db.collection("posts").document(p.id).update({"scout_rating": score})
+            st.success("Rating submitted!")
+
