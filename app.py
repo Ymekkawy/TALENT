@@ -208,4 +208,4 @@ if st.session_state.role=="scout":
         st.session_state[key_name] = score
         if st.button("Submit Rating",key=f"rate_{p.id}"):
             db.collection("posts").document(p.id).update({"scout_rating":score})
-            st.success("Rating submitted
+            st.success("Rating submitted")
