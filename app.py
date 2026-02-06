@@ -43,12 +43,9 @@ bucket = storage.bucket(STORAGE_BUCKET)
 # ==================================================
 # SESSION STATE DEFAULTS
 # ==================================================
-if "uid" not in st.session_state:
-    st.session_state.uid = None
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+for key in ["uid","role","logged_in"]:
+    if key not in st.session_state:
+        st.session_state[key] = None if key!="logged_in" else False
 
 # ==================================================
 # STYLING
@@ -71,7 +68,6 @@ def login(username, password):
         st.session_state.uid = "ADMIN"
         st.session_state.role = "admin"
         return True
-
     users = db.collection("users").where("username","==",username).stream()
     for u in users:
         d = u.to_dict()
@@ -79,9 +75,6 @@ def login(username, password):
             st.session_state.uid = u.id
             st.session_state.role = d["role"]
             return True
-
-    st.session_state.uid = None
-    st.session_state.role = None
     return False
 
 def signup(username, password, role):
@@ -100,18 +93,15 @@ def signup(username, password, role):
 if not st.session_state.logged_in:
     st.title("TALENT HOUSE")
     tab1, tab2 = st.tabs(["Login","Sign Up"])
-
     with tab1:
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
         if st.button("Login"):
-            success = login(u,p)
-            if success:
+            if login(u,p):
                 st.session_state.logged_in = True
                 st.experimental_rerun()
             else:
                 st.error("Invalid credentials or banned user.")
-
     with tab2:
         u = st.text_input("New Username")
         p = st.text_input("New Password", type="password")
@@ -126,7 +116,6 @@ if not st.session_state.logged_in:
 # ==================================================
 if st.session_state.role=="admin":
     st.title("Admin Dashboard")
-
     st.subheader("Users")
     for u in db.collection("users").stream():
         d = u.to_dict()
@@ -166,7 +155,6 @@ if st.session_state.role=="skiller":
     media = st.file_uploader("Upload Image or Video", type=["png","jpg","mp4"])
     desc = st.text_area("Description (optional)")
     cat = st.selectbox("Category", CATEGORIES)
-
     if st.button("Post Talent") and media:
         pid = str(uuid.uuid4())
         blob = bucket.blob(pid)
@@ -180,7 +168,6 @@ if st.session_state.role=="skiller":
             "admin_rating": 0,
             "created": datetime.utcnow()
         })
-
     st.subheader("Buy Tokens")
     pack = st.selectbox("Choose Package", list(TOKEN_PACKAGES.keys()))
     proof = st.file_uploader("Payment Screenshot", type=["png","jpg"])
@@ -201,30 +188,24 @@ if st.session_state.role=="skiller":
 # ==================================================
 # SCOUT PANEL
 # ==================================================
-if st.session_state.role == "scout":
+if st.session_state.role=="scout":
     st.title("Scout Panel")
     flt = st.selectbox("Filter by Category", ["All"] + CATEGORIES)
-
     for p in db.collection("posts").order_by("admin_rating", direction=firestore.Query.DESCENDING).stream():
         d = p.to_dict()
-        if flt != "All" and d["category"] != flt:
+        if flt!="All" and d["category"]!=flt:
             continue
-
         if d["media_url"].endswith(("mp4")):
             st.video(d["media_url"])
         else:
             st.image(d["media_url"])
-
         st.write(d.get("description",""))
         st.write(f"Category: {d['category']}")
-
         key_name = f"scout_rating_{p.id}"
         if key_name not in st.session_state:
             st.session_state[key_name] = 0
-
-        score = st.slider("Your Rating", 0, 10, st.session_state[key_name], key=key_name)
+        score = st.slider("Your Rating",0,10,st.session_state[key_name],key=key_name)
         st.session_state[key_name] = score
-
-        if st.button("Submit Rating", key=f"rate_{p.id}"):
-            db.collection("posts").document(p.id).update({"scout_rating": score})
-            st.success("Rating submitted!")
+        if st.button("Submit Rating",key=f"rate_{p.id}"):
+            db.collection("posts").document(p.id).update({"scout_rating":score})
+            st.success("Rating submitted
