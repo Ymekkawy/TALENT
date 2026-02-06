@@ -1,76 +1,17 @@
 import streamlit as st
-from datetime import datetime
 from PIL import Image
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
+import base64
+import uuid
+import datetime
 
-# ---------------- CONFIG ----------------
-st.set_page_config(page_title="TALENT HOUSE", layout="wide")
-st.title("TALENT HOUSE")
-
-# ---------------- MODERN NEON BACKGROUND ----------------
-st.markdown(
-    """
-    <style>
-    /* Background gradient neon purple + black */
-    .stApp {
-        background: linear-gradient(135deg, #1f005c, #4b0082);
-        color: #ffffff;
-        font-family: 'Arial', sans-serif;
-    }
-    /* Buttons */
-    div.stButton > button {
-        background-color: #8a2be2;
-        color: white;
-        border-radius: 12px;
-        height: 3em;
-        width: 12em;
-        font-weight: bold;
-        font-size: 16px;
-        border: 2px solid #d8b6ff;
-    }
-    div.stButton > button:hover {
-        background-color: #d8b6ff;
-        color: #4b0082;
-        border: 2px solid #8a2be2;
-    }
-    /* Inputs */
-    input, textarea, select {
-        background-color: #2a1a4d;
-        color: white;
-        border: 2px solid #8a2be2;
-        border-radius: 8px;
-        padding: 5px;
-    }
-    /* Sidebar */
-    .css-1d391kg {
-        background-color: #1a0b3d;
-        color: #ffffff;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ---------------- ADMIN LOGIN INFO ----------------
-ADMIN_USERNAME = "dev"
-ADMIN_PASSWORD = "152007poco"
-
-# ---------------- PAYMENT & TOKENS ----------------
-PAYMENT_NUMBER = "01000004397"
-TOKEN_PACKAGES = {
-    "30 Tokens": (100, 30),
-    "60 Tokens": (90, 60),
-    "600 Tokens": (1500, 600)
-}
-
-# ---------------- FIREBASE ----------------
-if not firebase_admin._apps:
-    cred_dict = {
-        "type": "service_account",
-        "project_id": "talent-199e5",
-        "private_key_id": "f687fdbe55873a2b8a665edc40408a21e9e288ea",
-        "private_key": """-----BEGIN PRIVATE KEY-----
+# -------------------- Firebase setup --------------------
+firebase_key_dict = {
+    "type": "service_account",
+    "project_id": "talent-199e5",
+    "private_key_id": "f687fdbe55873a2b8a665edc40408a21e9e288ea",
+    "private_key": """-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDUbIiOm6fruwt4
 XowfBM0u/Il6FJiUyBCLdSXqcYXOVlA6/Gwd/5OxAIEo/Tp0rX1xyH3OZv5Njuiu
 wwZt7PTyeBVbhCYsoIwWVGthneynbV2DIiWobQrsGcFp8vaxGOp0jrS+KkauTWpY
@@ -98,156 +39,110 @@ nl3jEIvgFlLHIGm6DWvaQ/IrBJLQ39vN/qm+SRXnwbEYHSE1NHJK8lFdEvte4167
 s2AgahPiZjG4PLCc6aSdOWyienl8dlUc80G/BUrDCyWiyEG9cX4nPYx5qrPof4qZ
 c/TblbNRQugIConFluGP1O/d
 -----END PRIVATE KEY-----""",
-        "client_email": "firebase-adminsdk-fbsvc@talent-199e5.iam.gserviceaccount.com",
-        "client_id": "112925563666280259221",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc@talent-199e5.iam.gserviceaccount.com",
-        "universe_domain": "googleapis.com"
-    }
-    cred = credentials.Certificate(cred_dict)
-    firebase_admin.initialize_app(cred)
+    "client_email": "firebase-adminsdk-fbsvc@talent-199e5.iam.gserviceaccount.com",
+    "client_id": "112925563666280259221",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40talent-199e5.iam.gserviceaccount.com",
+    "universe_domain": "googleapis.com"
+}
 
+cred = credentials.Certificate(firebase_key_dict)
+firebase_admin.initialize_app(cred, {'storageBucket': 'talent-199e5.appspot.com'})
 db = firestore.client()
+bucket = storage.bucket()
 
-# ---------------- UTILITY FUNCTIONS ----------------
-def get_user(username):
-    user_ref = db.collection("users").document(username).get()
-    if user_ref.exists:
-        return user_ref.to_dict()
-    return None
+# -------------------- Session State --------------------
+if 'role' not in st.session_state:
+    st.session_state['role'] = None
+if 'username' not in st.session_state:
+    st.session_state['username'] = None
 
-def create_user(username, password, role):
-    if get_user(username):
-        return False
-    db.collection("users").document(username).set({
-        "password": password,
-        "role": role,
-        "tokens": 30 if role=="skiller" else 0,
-        "profile_pic": None,
-        "banned": False
-    })
-    return True
+# -------------------- Design --------------------
+st.set_page_config(page_title="TALENT HOUSE", page_icon="🎤", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""
+    <style>
+    body {background-color: #0a0a0a; color: #fff; font-family: 'Arial';}
+    .stButton>button {background-color:#8a2be2;color:#fff;border-radius:10px;padding:10px 20px;}
+    .stTextInput>div>input {background-color:#1c1c1c;color:#fff;}
+    .stFileUploader>div>input {background-color:#1c1c1c;color:#fff;}
+    </style>
+""", unsafe_allow_html=True)
 
-def ban_user(username):
-    db.collection("users").document(username).update({"banned": True})
+# -------------------- Login --------------------
+st.title("TALENT HOUSE Login")
 
-# ---------------- LOGIN / SIGNUP ----------------
-st.sidebar.title("Login / SignUp")
-choice = st.sidebar.selectbox("Action", ["Login","SignUp"])
+username = st.text_input("Username")
+password = st.text_input("Password", type="password")
 
-if choice=="SignUp":
-    username = st.sidebar.text_input("Username")
-    password = st.sidebar.text_input("Password", type="password")
-    role = st.sidebar.selectbox("Role", ["skiller","scout"])
-    if st.sidebar.button("Sign Up"):
-        if create_user(username, password, role):
-            st.success("Account created! You can login now.")
+if st.button("Login"):
+    if username == "dev" and password == "152007poco":
+        st.session_state['role'] = "admin"
+        st.session_state['username'] = "dev"
+        st.success("Logged in as Admin!")
+    elif username and password:
+        # check Firestore users collection
+        user_doc = db.collection("users").document(username).get()
+        if user_doc.exists and user_doc.to_dict()['password'] == password:
+            st.session_state['role'] = user_doc.to_dict()['role']
+            st.session_state['username'] = username
+            st.success(f"Logged in as {st.session_state['role'].capitalize()}")
         else:
-            st.error("Username already exists.")
+            st.error("Invalid credentials!")
 
-elif choice=="Login":
-    username = st.sidebar.text_input("Username")
-    password = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Login"):
-        if username==ADMIN_USERNAME and password==ADMIN_PASSWORD:
-            st.session_state['role'] = 'admin'
-            st.session_state['username'] = ADMIN_USERNAME
-        else:
-            user = get_user(username)
-            if user and user["password"]==password:
-                if user.get("banned"):
-                    st.error("This account is banned.")
-                else:
-                    st.session_state['role'] = user["role"]
-                    st.session_state['username'] = username
+# -------------------- Admin Dashboard --------------------
+if st.session_state['role'] == "admin":
+    st.header("Admin Dashboard")
+    st.subheader("Users")
+    users = db.collection("users").stream()
+    for user in users:
+        u = user.to_dict()
+        st.write(f"{u['username']} - {u['role']} - Tokens: {u.get('tokens',0)}")
+        if st.button(f"Ban {u['username']}"):
+            db.collection("users").document(u['username']).update({"banned": True})
+
+    st.subheader("Payment Requests")
+    payments = db.collection("payments").stream()
+    for pay in payments:
+        p = pay.to_dict()
+        st.write(f"User: {p['skiller_id']} Amount: {p['amount']}")
+        st.image(p['screenshot'])
+        if st.button(f"Approve {p['skiller_id']}"):
+            db.collection("users").document(p['skiller_id']).update({"tokens": p['amount']//10}) # example
+            db.collection("payments").document(pay.id).update({"status":"approved"})
+
+# -------------------- Skiller / Scout --------------------
+if st.session_state['role'] in ["skiller","scout"]:
+    st.header(f"{st.session_state['role'].capitalize()} Dashboard")
+    if st.session_state['role'] == "skiller":
+        st.subheader("Upload your talent")
+        uploaded_file = st.file_uploader("Image or Video", type=["png","jpg","jpeg","mp4"])
+        category = st.selectbox("Category", ["Singing","Writing","General","Other"])
+        description = st.text_area("Description (optional)")
+        if uploaded_file:
+            blob = bucket.blob(f"{uuid.uuid4()}_{uploaded_file.name}")
+            blob.upload_from_file(uploaded_file)
+            url = blob.public_url
+            db.collection("posts").add({
+                "user": st.session_state['username'],
+                "file_url": url,
+                "category": category,
+                "description": description,
+                "timestamp": datetime.datetime.now(),
+                "rating": 0
+            })
+            st.success("Talent uploaded!")
+    elif st.session_state['role'] == "scout":
+        st.subheader("Talent Feed")
+        posts = db.collection("posts").order_by("rating", direction=firestore.Query.DESCENDING).stream()
+        for post in posts:
+            p = post.to_dict()
+            st.write(f"Category: {p['category']} | Description: {p.get('description','')}")
+            if p['file_url'].endswith(("png","jpg","jpeg")):
+                st.image(p['file_url'])
             else:
-                st.error("Invalid login")
-
-# ---------------- AFTER LOGIN ----------------
-if 'role' in st.session_state:
-    role = st.session_state['role']
-    username = st.session_state['username']
-
-    if role=="skiller":
-        st.header(f"Welcome Skiller: {username}")
-
-        # Profile picture
-        profile_pic_file = st.file_uploader("Upload profile picture", type=['png','jpg','jpeg'])
-        if profile_pic_file:
-            db.collection("users").document(username).update({"profile_pic": profile_pic_file.getvalue()})
-            image = Image.open(profile_pic_file)
-            st.image(image, caption="Profile picture")
-            if st.button("Delete profile picture"):
-                db.collection("users").document(username).update({"profile_pic": None})
-                st.success("Profile picture deleted.")
-
-        # Upload Post
-        st.subheader("Upload your talent post")
-        post_file = st.file_uploader("Image or Video", type=['png','jpg','jpeg','mp4'])
-        post_desc = st.text_area("Description (optional)")
-        category = st.selectbox("Category", ["General","Singing","Writing","Other"])
-        if st.button("Post Talent"):
-            if post_file:
-                post_data = {
-                    "skiller_id": username,
-                    "file": post_file.getvalue(),
-                    "description": post_desc,
-                    "category": category,
-                    "timestamp": datetime.now(),
-                    "rating": 5  # Admin initial rating
-                }
-                db.collection("posts").add(post_data)
-                st.success("Talent posted with admin rating 5!")
-
-        # Delete post
-        st.subheader("Your Posts")
-        posts_ref = db.collection("posts").where("skiller_id", "==", username).stream()
-        for post in posts_ref:
-            post_data = post.to_dict()
-            st.write(f"Post ID: {post.id} | Category: {post_data['category']}")
-            if post_data.get("description"):
-                st.write(post_data["description"])
-            if st.button(f"Delete {post.id}"):
-                db.collection("posts").document(post.id).delete()
-                st.success("Post deleted!")
-
-    elif role=="scout":
-        st.header(f"Welcome Scout: {username}")
-        category_filter = st.selectbox("Filter by category", ["All","General","Singing","Writing","Other"])
-        posts_ref = db.collection("posts").order_by("rating", direction=firestore.Query.DESCENDING).stream()
-        for post in posts_ref:
-            post_data = post.to_dict()
-            if category_filter!="All" and post_data["category"]!=category_filter:
-                continue
-            st.image(post_data["file"], width=300)
-            if post_data.get("description"):
-                st.write(post_data["description"])
-            rating = st.number_input("Rate this talent", min_value=1, max_value=10, key=post.id)
-            if st.button(f"Submit Rating for {post.id}"):
-                new_rating = (post_data["rating"] + rating) / 2
-                db.collection("posts").document(post.id).update({"rating": new_rating})
-
-    elif role=="admin":
-        st.header(f"Welcome Admin: {username}")
-        st.subheader("All Users")
-        users = db.collection("users").stream()
-        for user_doc in users:
-            u = user_doc.to_dict()
-            st.write(f"{user_doc.id} | Role: {u['role']} | Tokens: {u['tokens']} | Banned: {u.get('banned', False)}")
-            if st.button(f"Ban {user_doc.id}"):
-                ban_user(user_doc.id)
-                st.success(f"{user_doc.id} has been banned.")
-
-        st.subheader("Payment Requests")
-        payments = db.collection("payments").stream()
-        for pay in payments:
-            p = pay.to_dict()
-            st.write(f"{p['skiller_id']} requested {p['tokens']} tokens | Amount: {p['amount']}")
-            if 'screenshot' in p:
-                st.image(p['screenshot'], width=300)
-            if st.button(f"Approve {pay.id}"):
-                db.collection("users").document(p['skiller_id']).update({"tokens": firestore.Increment(p['tokens'])})
-                db.collection("payments").document(pay.id).update({"status":"approved"})
-                st.success("Tokens added!")
+                st.video(p['file_url'])
+            rating = st.slider(f"Rate {p['user']}", 0, 5, 0)
+            if st.button(f"Submit Rating for {p['user']}"):
+                db.collection("posts").document(post.id).update({"rating": rating})
