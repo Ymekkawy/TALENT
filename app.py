@@ -43,9 +43,14 @@ bucket = storage.bucket(STORAGE_BUCKET)
 # ===========================
 # SESSION STATE DEFAULTS
 # ===========================
-for key in ["uid","role","logged_in","login_rerun"]:
-    if key not in st.session_state:
-        st.session_state[key] = None if key not in ["logged_in","login_rerun"] else False
+defaults = {
+    "uid": None,
+    "role": None,
+    "logged_in": False,
+}
+for k,v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # ===========================
 # STYLING
@@ -67,6 +72,7 @@ def login(username, password):
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         st.session_state.uid = "ADMIN"
         st.session_state.role = "admin"
+        st.session_state.logged_in = True
         return True
     users = db.collection("users").where("username","==",username).stream()
     for u in users:
@@ -74,6 +80,7 @@ def login(username, password):
         if d["password"] == password and not d.get("banned", False):
             st.session_state.uid = u.id
             st.session_state.role = d["role"]
+            st.session_state.logged_in = True
             return True
     return False
 
@@ -98,8 +105,7 @@ if not st.session_state.logged_in:
         p = st.text_input("Password", type="password", key="login_pass")
         if st.button("Login"):
             if login(u,p):
-                st.session_state.logged_in = True
-                st.session_state.login_rerun = True
+                st.success(f"Logged in as {st.session_state.role}")
             else:
                 st.error("Invalid credentials or banned user.")
     with tab2:
@@ -109,10 +115,6 @@ if not st.session_state.logged_in:
         if st.button("Create Account"):
             signup(u,p,r)
             st.success("Account created successfully.")
-    # ✅ rerun بعد تأكد كل session_state جاهز
-    if st.session_state.login_rerun:
-        st.session_state.login_rerun = False
-        st.experimental_rerun()
     st.stop()
 
 # ===========================
