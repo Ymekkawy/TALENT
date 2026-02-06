@@ -2,7 +2,6 @@ import streamlit as st
 from PIL import Image
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-import base64
 import uuid
 import datetime
 
@@ -48,8 +47,11 @@ c/TblbNRQugIConFluGP1O/d
     "universe_domain": "googleapis.com"
 }
 
-cred = credentials.Certificate(firebase_key_dict)
-firebase_admin.initialize_app(cred, {'storageBucket': 'talent-199e5.appspot.com'})
+# Fix initialize_app issue
+if not firebase_admin._apps:
+    cred = credentials.Certificate(firebase_key_dict)
+    firebase_admin.initialize_app(cred, {'storageBucket': 'talent-199e5.appspot.com'})
+
 db = firestore.client()
 bucket = storage.bucket()
 
@@ -67,6 +69,8 @@ st.markdown("""
     .stButton>button {background-color:#8a2be2;color:#fff;border-radius:10px;padding:10px 20px;}
     .stTextInput>div>input {background-color:#1c1c1c;color:#fff;}
     .stFileUploader>div>input {background-color:#1c1c1c;color:#fff;}
+    .stSelectbox>div>div {background-color:#1c1c1c;color:#fff;}
+    .stTextArea>div>textarea {background-color:#1c1c1c;color:#fff;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -82,7 +86,6 @@ if st.button("Login"):
         st.session_state['username'] = "dev"
         st.success("Logged in as Admin!")
     elif username and password:
-        # check Firestore users collection
         user_doc = db.collection("users").document(username).get()
         if user_doc.exists and user_doc.to_dict()['password'] == password:
             st.session_state['role'] = user_doc.to_dict()['role']
@@ -109,7 +112,7 @@ if st.session_state['role'] == "admin":
         st.write(f"User: {p['skiller_id']} Amount: {p['amount']}")
         st.image(p['screenshot'])
         if st.button(f"Approve {p['skiller_id']}"):
-            db.collection("users").document(p['skiller_id']).update({"tokens": p['amount']//10}) # example
+            db.collection("users").document(p['skiller_id']).update({"tokens": p['amount']//10})
             db.collection("payments").document(pay.id).update({"status":"approved"})
 
 # -------------------- Skiller / Scout --------------------
