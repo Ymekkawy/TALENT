@@ -1,14 +1,11 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import json
-from datetime import datetime
 from PIL import Image
-import io
+from datetime import datetime
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="TALENT HOUSE", layout="wide")
-
 ADMIN_USERNAME = "dev"
 ADMIN_PASSWORD = "152007poco"
 PAYMENT_NUMBER = "01000004397"
@@ -21,8 +18,8 @@ TOKEN_PACKAGES = {
 
 # ---------------- FIREBASE ----------------
 if not firebase_admin._apps:
-    firebase_key = json.loads(st.secrets["FIREBASE_KEY"])
-    cred = credentials.Certificate(firebase_key)
+    cred_dict = st.secrets["FIREBASE_KEY_DICT"]
+    cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
@@ -35,7 +32,6 @@ if "user" not in st.session_state:
 # ---------------- AUTH ----------------
 def login():
     st.title("🔐 Login")
-
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
@@ -44,7 +40,6 @@ def login():
             st.session_state.user = "admin"
             st.session_state.role = "admin"
             st.rerun()
-
         user_ref = db.collection("users").document(username)
         user = user_ref.get()
         if user.exists and user.to_dict()["password"] == password:
@@ -56,7 +51,6 @@ def login():
 
 def signup():
     st.title("📝 Sign Up")
-
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     role = st.selectbox("Role", ["skiller", "scout"])
@@ -78,11 +72,10 @@ def signup():
 # ---------------- SKILLER ----------------
 def skiller_dashboard():
     st.title("🎤 Skiller Profile")
-
     user_ref = db.collection("users").document(st.session_state.user)
     user_data = user_ref.get().to_dict()
 
-    pic = st.file_uploader("Profile Picture", type=["jpg", "png"])
+    pic = st.file_uploader("Profile Picture", type=["jpg","png"])
     if pic:
         user_ref.update({"profile_pic": pic.read()})
         st.success("Profile picture updated")
@@ -91,7 +84,7 @@ def skiller_dashboard():
         user_ref.update({"profile_pic": ""})
 
     st.subheader("📸 New Talent Post (Image/Video required)")
-    media = st.file_uploader("Upload Image or Video", type=["jpg", "png", "mp4"])
+    media = st.file_uploader("Upload Image or Video", type=["jpg","png","mp4"])
     if media and st.button("Post"):
         db.collection("posts").add({
             "user": st.session_state.user,
@@ -103,7 +96,7 @@ def skiller_dashboard():
         st.success("Posted")
 
     st.subheader("🗑 Your Posts")
-    posts = db.collection("posts").where("user", "==", st.session_state.user).stream()
+    posts = db.collection("posts").where("user","==",st.session_state.user).stream()
     for p in posts:
         data = p.to_dict()
         col1, col2 = st.columns([3,1])
@@ -132,19 +125,23 @@ def skiller_dashboard():
 def scout_dashboard():
     st.title("🔍 Discover Talents")
     posts = db.collection("posts").stream()
-    sorted_posts = sorted(posts, key=lambda p: (p.to_dict().get("rating",0), db.collection("users").document(p.to_dict()["user"]).get().to_dict().get("tokens",0)), reverse=True)
+    sorted_posts = sorted(
+        posts,
+        key=lambda p: (
+            p.to_dict().get("rating",0),
+            db.collection("users").document(p.to_dict()["user"]).get().to_dict().get("tokens",0)
+        ),
+        reverse=True
+    )
     for p in sorted_posts:
         data = p.to_dict()
         st.write(f"Talent: {data['user']} | Rating: {data['rating']}")
         if st.button(f"⭐ Rate {p.id}"):
-            db.collection("posts").document(p.id).update({
-                "rating": data["rating"] + 1
-            })
+            db.collection("posts").document(p.id).update({"rating": data["rating"] + 1})
 
 # ---------------- ADMIN ----------------
 def admin_panel():
     st.title("🛠 Admin Panel")
-
     st.subheader("Users")
     for u in db.collection("users").stream():
         st.write(u.id, u.to_dict()["role"])
@@ -152,19 +149,17 @@ def admin_panel():
             db.collection("users").document(u.id).delete()
 
     st.subheader("Payments")
-    for p in db.collection("payments").where("processed", "==", False).stream():
+    for p in db.collection("payments").where("processed","==",False).stream():
         data = p.to_dict()
         if st.button(f"Approve {p.id}"):
             user_ref = db.collection("users").document(data["user"])
             user_data = user_ref.get().to_dict()
-            user_ref.update({
-                "tokens": user_data["tokens"] + data["tokens"]
-            })
+            user_ref.update({"tokens": user_data["tokens"] + data["tokens"]})
             db.collection("payments").document(p.id).update({"processed": True})
 
 # ---------------- ROUTER ----------------
 if not st.session_state.user:
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
+    tab1, tab2 = st.tabs(["Login","Sign Up"])
     with tab1:
         login()
     with tab2:
